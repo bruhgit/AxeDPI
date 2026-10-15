@@ -75,10 +75,16 @@ For unencrypted HTTP traffic, AxeDPI fragments the request line and alters heade
 ### 3. Integrated DNS-over-HTTPS (DoH)
 To prevent ISP DNS poisoning and false NXDOMAIN responses, AxeDPI includes an in-memory cached RFC 8484 DoH resolver using Cloudflare (`1.1.1.1`) and Google (`8.8.8.8`) endpoints via Windows HTTP services (`winhttp.dll`).
 
-### 4. Windows System Proxy Hook
+### 4. Live DPI Pause / Resume Mode
+Allows users to pause DPI manipulation on-the-fly via UI or system tray without disconnecting or restarting the proxy service. Outbound sockets on `127.0.0.1:10808` stay active, passing packets through directly without TLS segmentation or delay, preventing connection drops in web browsers.
+
+### 5. Process-Level Exclusions List
+Uses the Windows IP Helper API (`GetExtendedTcpTable` + `QueryFullProcessImageNameW`) to resolve the client process name for each incoming TCP connection. Connections originating from user-defined executables (e.g., `spotify.exe`, `riotclient.exe`, `valorant.exe`) bypass TLS fragmentation entirely, preventing conflicts with anti-cheat software and strict TLS pinning.
+
+### 6. Windows System Proxy Hook
 Allows one-click system-wide routing via WinINet API (`INTERNET_OPTION_SETTINGS_CHANGED`), configuring Windows Registry proxy keys automatically without requiring manual network adapter configuration.
 
-### 5. Discord Proxy Integration
+### 7. Discord Proxy Integration
 Detects local Discord installations across `%LOCALAPPDATA%` and launches Discord instances configured with `--proxy-server` targeting the local AxeDPI port, allowing uninterrupted Voice/Gateway connections through restrictive networks.
 
 ---
@@ -91,6 +97,10 @@ The core C++ engine exports clean standard C ABI functions, enabling integration
 int  DpiStartServer(const char* bindHost, int bindPort, int splitPos, int splitDelayMs, const char* upstreamProxy, int autoSysProxy);
 void DpiStopServer();
 int  DpiIsRunning();
+void DpiSetPaused(int paused);
+int  DpiIsPaused();
+void DpiSetExcludedApps(const char* processList);
+int  DpiIsAppExcluded(const char* processName);
 int  DpiSetSystemProxy(int enable, const char* proxyAddr);
 int  DpiIsSystemProxyEnabled();
 int  DpiSetStartup(int enable, const char* exePath);

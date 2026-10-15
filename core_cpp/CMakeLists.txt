@@ -20,6 +20,7 @@ target_link_libraries(AxeDPI.Service.DllComponents PRIVATE
     ws2_32
     wininet
     winhttp
+    iphlpapi
 )
 
 set_target_properties(AxeDPI.Service.DllComponents PROPERTIES

@@ -11,6 +11,7 @@ namespace AxeDPI.UI.Services
         private readonly NotifyIcon _notifyIcon;
         private readonly ContextMenuStrip _contextMenu;
         private readonly ToolStripMenuItem _itemStatus;
+        private readonly ToolStripMenuItem _itemPause;
         private readonly ToolStripMenuItem _itemProxy;
         private readonly System.Windows.Window _mainWindow;
         private readonly MainViewModel _viewModel;
@@ -24,31 +25,38 @@ namespace AxeDPI.UI.Services
             _contextMenu.RenderMode = ToolStripRenderMode.System;
 
             // 1. Show App
-            var itemShow = new ToolStripMenuItem("AxeDPI'ı Aç", null, (s, e) => RestoreWindow());
+            var itemShow = new ToolStripMenuItem("Open AxeDPI", null, (s, e) => RestoreWindow());
             itemShow.Font = new Font(itemShow.Font, FontStyle.Bold);
             _contextMenu.Items.Add(itemShow);
 
-            var itemHide = new ToolStripMenuItem("Pencereyi Gizle", null, (s, e) => MinimizeToTray());
+            var itemHide = new ToolStripMenuItem("Hide to Tray", null, (s, e) => MinimizeToTray());
             _contextMenu.Items.Add(itemHide);
 
             _contextMenu.Items.Add(new ToolStripSeparator());
 
             // 2. Toggle DPI Bypass
-            _itemStatus = new ToolStripMenuItem("DPI Bypass: Kapalı", null, (s, e) =>
+            _itemStatus = new ToolStripMenuItem("DPI Bypass: Disabled", null, (s, e) =>
             {
                 _viewModel.ToggleServiceCommand.Execute(null);
             });
             _contextMenu.Items.Add(_itemStatus);
 
+            // 2b. Toggle DPI Pause
+            _itemPause = new ToolStripMenuItem("Pause DPI", null, (s, e) =>
+            {
+                _viewModel.TogglePauseCommand.Execute(null);
+            });
+            _contextMenu.Items.Add(_itemPause);
+
             // 3. Toggle System Proxy
-            _itemProxy = new ToolStripMenuItem("Sistem Proxy: Kapalı", null, (s, e) =>
+            _itemProxy = new ToolStripMenuItem("System Proxy: Disabled", null, (s, e) =>
             {
                 _viewModel.ToggleSystemProxyCommand.Execute(null);
             });
             _contextMenu.Items.Add(_itemProxy);
 
             // 4. Launch Discord
-            var itemDiscord = new ToolStripMenuItem("Discord'u Başlat", null, (s, e) =>
+            var itemDiscord = new ToolStripMenuItem("Launch Discord", null, (s, e) =>
             {
                 _viewModel.LaunchDiscordCommand.Execute(null);
             });
@@ -57,7 +65,7 @@ namespace AxeDPI.UI.Services
             _contextMenu.Items.Add(new ToolStripSeparator());
 
             // 5. Exit
-            var itemExit = new ToolStripMenuItem("Çıkış", null, (s, e) =>
+            var itemExit = new ToolStripMenuItem("Exit AxeDPI", null, (s, e) =>
             {
                 ExitApplication();
             });
@@ -102,6 +110,7 @@ namespace AxeDPI.UI.Services
             _viewModel.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(MainViewModel.IsRunning) ||
+                    e.PropertyName == nameof(MainViewModel.IsPaused) ||
                     e.PropertyName == nameof(MainViewModel.IsSystemProxyActive))
                 {
                     UpdateTrayState();
@@ -114,15 +123,33 @@ namespace AxeDPI.UI.Services
         public void UpdateTrayState()
         {
             bool running = _viewModel.IsRunning;
+            bool paused = _viewModel.IsPaused;
             bool proxy = _viewModel.IsSystemProxyActive;
 
-            _itemStatus.Text = running ? "DPI Bypass: Açık (Koruma Devrede)" : "DPI Bypass: Kapalı";
+            _itemStatus.Text = running ? "DPI Bypass: Active" : "DPI Bypass: Disabled";
             _itemStatus.Checked = running;
 
-            _itemProxy.Text = proxy ? "Sistem Proxy: Aktif" : "Sistem Proxy: Kapalı";
+            _itemPause.Enabled = running;
+            if (!running)
+            {
+                _itemPause.Text = "Pause DPI";
+                _itemPause.Checked = false;
+            }
+            else if (paused)
+            {
+                _itemPause.Text = "Resume DPI (Paused)";
+                _itemPause.Checked = true;
+            }
+            else
+            {
+                _itemPause.Text = "Pause DPI";
+                _itemPause.Checked = false;
+            }
+
+            _itemProxy.Text = proxy ? "System Proxy: Active" : "System Proxy: Disabled";
             _itemProxy.Checked = proxy;
 
-            string status = running ? "Aktif" : "Devre Dışı";
+            string status = running ? (paused ? "Paused" : "Active") : "Disabled";
             string tooltip = $"AxeDPI ({status})";
             if (tooltip.Length > 63) tooltip = tooltip.Substring(0, 63);
             _notifyIcon.Text = tooltip;
@@ -131,7 +158,7 @@ namespace AxeDPI.UI.Services
         public void MinimizeToTray()
         {
             _mainWindow.Hide();
-            _notifyIcon.ShowBalloonTip(1500, "AxeDPI", "AxeDPI arka planda sistem tepsisinde çalışmaya devam ediyor.", ToolTipIcon.Info);
+            _notifyIcon.ShowBalloonTip(1500, "AxeDPI", "AxeDPI is running in the background system tray.", ToolTipIcon.Info);
         }
 
         public void RestoreWindow()

@@ -26,6 +26,18 @@ namespace AxeDPI.UI
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int DpiIsRunning();
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void DpiSetPaused(int paused);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int DpiIsPaused();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern void DpiSetExcludedApps([MarshalAs(UnmanagedType.LPStr)] string commaSeparatedList);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        public static extern int DpiIsAppExcluded([MarshalAs(UnmanagedType.LPStr)] string appName);
+
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         public static extern int DpiSetSystemProxy(
             int enable,

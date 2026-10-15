@@ -42,7 +42,7 @@ namespace AxeDPI.UI
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
-            // Kapatma tuşuna basınca tepsiye küçült
+            // Minimize to tray on close button click
             if (_trayService != null)
             {
                 _trayService.MinimizeToTray();

@@ -15,6 +15,7 @@ namespace AxeDPI.UI.Services
 
         public event Action<string>? OnLogReceived;
         public event Action<bool>? OnRunningStateChanged;
+        public event Action<bool>? OnPausedStateChanged;
         public event Action<bool>? OnSystemProxyStateChanged;
         public event Action<ulong, ulong, int>? OnStatsUpdated;
 
@@ -67,6 +68,56 @@ namespace AxeDPI.UI.Services
             try
             {
                 return NativeMethods.DpiIsStartupEnabled() != 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool IsPaused()
+        {
+            try
+            {
+                return NativeMethods.DpiIsPaused() != 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public void SetPaused(bool paused)
+        {
+            try
+            {
+                NativeMethods.DpiSetPaused(paused ? 1 : 0);
+                OnPausedStateChanged?.Invoke(IsPaused());
+            }
+            catch (Exception ex)
+            {
+                OnLogReceived?.Invoke($"[Error] Pause toggle failed: {ex.Message}");
+            }
+        }
+
+        public void SetExcludedApps(IEnumerable<string> apps)
+        {
+            try
+            {
+                string joined = string.Join(",", apps);
+                NativeMethods.DpiSetExcludedApps(joined);
+            }
+            catch (Exception ex)
+            {
+                OnLogReceived?.Invoke($"[Error] Set exclusions failed: {ex.Message}");
+            }
+        }
+
+        public bool IsAppExcluded(string appName)
+        {
+            try
+            {
+                return NativeMethods.DpiIsAppExcluded(appName) != 0;
             }
             catch
             {

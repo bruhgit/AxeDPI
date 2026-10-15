@@ -14,6 +14,12 @@ extern "C" {
 AXEDPI_API int __cdecl DpiStartServer(const char* bindHost, int bindPort, int splitPos, int splitDelayMs, const char* upstreamProxy, int autoSysProxy);
 AXEDPI_API void __cdecl DpiStopServer();
 AXEDPI_API int __cdecl DpiIsRunning();
+AXEDPI_API void __cdecl DpiSetPaused(int paused);
+AXEDPI_API int __cdecl DpiIsPaused();
+
+// Application Exclusions
+AXEDPI_API void __cdecl DpiSetExcludedApps(const char* commaSeparatedList);
+AXEDPI_API int __cdecl DpiIsAppExcluded(const char* appName);
 
 // System Proxy
 AXEDPI_API int __cdecl DpiSetSystemProxy(int enable, const char* proxyAddr);

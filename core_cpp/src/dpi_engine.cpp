@@ -5,14 +5,18 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #include <tlhelp32.h>
 #include <iostream>
 #include <sstream>
 #include <vector>
 #include <cstring>
 #include <chrono>
+#include <algorithm>
+#include <mutex>
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
 
 namespace AxeDpi {
 
@@ -52,6 +56,82 @@ void DpiEngine::Log(const std::string& msg) {
 
 bool DpiEngine::IsRunning() const {
     return m_running.load();
+}
+
+void DpiEngine::SetPaused(bool paused) {
+    m_paused.store(paused);
+    if (paused) {
+        Log("[Status] DPI Bypass PAUSED (Traffic passing through unmodified).");
+    } else {
+        Log("[Status] DPI Bypass RESUMED (Active packet fragmentation enabled).");
+    }
+}
+
+bool DpiEngine::IsPaused() const {
+    return m_paused.load();
+}
+
+void DpiEngine::SetExcludedApps(const std::vector<std::string>& apps) {
+    std::lock_guard<std::mutex> lock(m_exclusionsMutex);
+    m_excludedApps.clear();
+    for (const auto& a : apps) {
+        std::string lower = a;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        m_excludedApps.push_back(lower);
+    }
+    Log("[Config] Excluded applications updated (" + std::to_string(m_excludedApps.size()) + " app(s) in list).");
+}
+
+bool DpiEngine::IsAppExcluded(const std::string& appName) const {
+    if (appName.empty()) return false;
+    std::string lower = appName;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    std::lock_guard<std::mutex> lock(m_exclusionsMutex);
+    for (const auto& excluded : m_excludedApps) {
+        if (lower == excluded) return true;
+        if (lower.size() > excluded.size() && lower.substr(lower.size() - excluded.size()) == excluded) return true;
+    }
+    return false;
+}
+
+std::string DpiEngine::GetClientProcessName(uint16_t clientPort) {
+    DWORD dwSize = 0;
+    GetExtendedTcpTable(NULL, &dwSize, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+    if (dwSize == 0) return "";
+
+    std::vector<BYTE> buffer(dwSize);
+    PMIB_TCPTABLE_OWNER_PID pTable = reinterpret_cast<PMIB_TCPTABLE_OWNER_PID>(buffer.data());
+
+    if (GetExtendedTcpTable(pTable, &dwSize, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0) == NO_ERROR) {
+        DWORD myPid = GetCurrentProcessId();
+        for (DWORD i = 0; i < pTable->dwNumEntries; ++i) {
+            DWORD port = pTable->table[i].dwLocalPort;
+            if (port == static_cast<DWORD>(clientPort) ||
+                port == static_cast<DWORD>(htons(clientPort)) ||
+                port == static_cast<DWORD>(ntohs(clientPort))) {
+                DWORD pid = pTable->table[i].dwOwningPid;
+                if (pid == 0 || pid == myPid) continue;
+
+                HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                if (hProcess) {
+                    wchar_t fullPath[MAX_PATH] = { 0 };
+                    DWORD pathLen = MAX_PATH;
+                    if (QueryFullProcessImageNameW(hProcess, 0, fullPath, &pathLen)) {
+                        CloseHandle(hProcess);
+                        std::wstring ws(fullPath);
+                        size_t pos = ws.find_last_of(L"\\/");
+                        std::wstring exeName = (pos != std::wstring::npos) ? ws.substr(pos + 1) : ws;
+                        std::string res(exeName.begin(), exeName.end());
+                        std::transform(res.begin(), res.end(), res.begin(), ::tolower);
+                        return res;
+                    }
+                    CloseHandle(hProcess);
+                }
+            }
+        }
+    }
+    return "";
 }
 
 void DpiEngine::GetStats(uint64_t& outBytesIn, uint64_t& outBytesOut, int& outActiveConns) const {
@@ -173,8 +253,9 @@ void DpiEngine::ServerLoop() {
         setsockopt(clientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
 
         m_activeConns++;
-        std::thread([this, clientSock]() {
-            HandleClient(static_cast<uintptr_t>(clientSock));
+        uint16_t clientPort = clientAddr.sin_port;
+        std::thread([this, clientSock, clientPort]() {
+            HandleClient(static_cast<uintptr_t>(clientSock), clientPort);
             m_activeConns--;
         }).detach();
     }
@@ -253,8 +334,14 @@ uintptr_t DpiEngine::DialTarget(const std::string& host, int port) {
     return static_cast<uintptr_t>(remoteSock);
 }
 
-void DpiEngine::HandleClient(uintptr_t clientSockRaw) {
+void DpiEngine::HandleClient(uintptr_t clientSockRaw, uint16_t clientPort) {
     SOCKET clientSock = static_cast<SOCKET>(clientSockRaw);
+
+    std::string procName = GetClientProcessName(clientPort);
+    bool isExcluded = IsAppExcluded(procName);
+    if (isExcluded && m_config.verbose) {
+        Log("[Exclusion] Connection from excluded app: " + procName + " (Direct pass-through)");
+    }
 
     // Peek the first byte to detect protocol
     uint8_t firstByte = 0;
@@ -266,19 +353,19 @@ void DpiEngine::HandleClient(uintptr_t clientSockRaw) {
 
     if (firstByte == 0x05) {
         // SOCKS5 Protocol
-        HandleSocks5(clientSockRaw, &firstByte);
+        HandleSocks5(clientSockRaw, &firstByte, isExcluded);
     } else {
         // HTTP / HTTPS CONNECT
         std::string reqLine = ReadLine(clientSock);
         if (!reqLine.empty()) {
-            HandleHttp(clientSockRaw, reqLine);
+            HandleHttp(clientSockRaw, reqLine, isExcluded);
         } else {
             closesocket(clientSock);
         }
     }
 }
 
-void DpiEngine::HandleSocks5(uintptr_t clientSockRaw, const uint8_t* /*initialByte*/) {
+void DpiEngine::HandleSocks5(uintptr_t clientSockRaw, const uint8_t* /*initialByte*/, bool isExcluded) {
     SOCKET clientSock = static_cast<SOCKET>(clientSockRaw);
 
     // 1. Auth negotiation
@@ -362,10 +449,10 @@ void DpiEngine::HandleSocks5(uintptr_t clientSockRaw, const uint8_t* /*initialBy
     uint8_t okReply[10] = {0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0};
     send(clientSock, reinterpret_cast<const char*>(okReply), 10, 0);
 
-    TunnelWithDpi(clientSockRaw, remoteSockRaw);
+    TunnelWithDpi(clientSockRaw, remoteSockRaw, isExcluded);
 }
 
-void DpiEngine::HandleHttp(uintptr_t clientSockRaw, const std::string& reqLine) {
+void DpiEngine::HandleHttp(uintptr_t clientSockRaw, const std::string& reqLine, bool isExcluded) {
     SOCKET clientSock = static_cast<SOCKET>(clientSockRaw);
 
     std::istringstream iss(reqLine);
@@ -402,7 +489,7 @@ void DpiEngine::HandleHttp(uintptr_t clientSockRaw, const std::string& reqLine) 
         const char* okResp = "HTTP/1.1 200 Connection Established\r\n\r\n";
         send(clientSock, okResp, static_cast<int>(strlen(okResp)), 0);
 
-        TunnelWithDpi(clientSockRaw, remoteSockRaw);
+        TunnelWithDpi(clientSockRaw, remoteSockRaw, isExcluded);
     } else {
         // Plain HTTP
         std::string fullHeaders = reqLine;
@@ -437,31 +524,38 @@ void DpiEngine::HandleHttp(uintptr_t clientSockRaw, const std::string& reqLine) 
             return;
         }
 
-        // Apply DPI Header Modification: Host -> hOsT
-        auto modBuf = ModifyHttpHeaders(reinterpret_cast<const uint8_t*>(fullHeaders.data()), fullHeaders.size());
-        send(static_cast<SOCKET>(remoteSockRaw), reinterpret_cast<const char*>(modBuf.data()), static_cast<int>(modBuf.size()), 0);
+        if (m_paused.load() || isExcluded) {
+            send(static_cast<SOCKET>(remoteSockRaw), fullHeaders.data(), static_cast<int>(fullHeaders.size()), 0);
+        } else {
+            // Apply DPI Header Modification: Host -> hOsT
+            auto modBuf = ModifyHttpHeaders(reinterpret_cast<const uint8_t*>(fullHeaders.data()), fullHeaders.size());
+            send(static_cast<SOCKET>(remoteSockRaw), reinterpret_cast<const char*>(modBuf.data()), static_cast<int>(modBuf.size()), 0);
+        }
 
-        TunnelWithDpi(clientSockRaw, remoteSockRaw);
+        TunnelWithDpi(clientSockRaw, remoteSockRaw, isExcluded);
     }
 }
 
-void DpiEngine::TunnelWithDpi(uintptr_t clientSockRaw, uintptr_t remoteSockRaw) {
+void DpiEngine::TunnelWithDpi(uintptr_t clientSockRaw, uintptr_t remoteSockRaw, bool isExcluded) {
     SOCKET clientSock = static_cast<SOCKET>(clientSockRaw);
     SOCKET remoteSock = static_cast<SOCKET>(remoteSockRaw);
 
     std::atomic<bool> closed{false};
 
     // Forward Client -> Remote with DPI Bypass
-    std::thread tUpstream([this, clientSock, remoteSock, &closed]() {
+    std::thread tUpstream([this, clientSock, remoteSock, isExcluded, &closed]() {
         bool firstPacket = true;
         std::vector<uint8_t> buffer(65536);
 
         while (!closed.load()) {
             if (firstPacket) {
-                // Peek first 5 bytes for TLS record header
-                uint8_t header[5] = {0};
-                int nHeader = recv(clientSock, reinterpret_cast<char*>(header), 5, MSG_PEEK);
-                if (nHeader <= 0) break;
+                if (m_paused.load() || isExcluded) {
+                    firstPacket = false;
+                } else {
+                    // Peek first 5 bytes for TLS record header
+                    uint8_t header[5] = {0};
+                    int nHeader = recv(clientSock, reinterpret_cast<char*>(header), 5, MSG_PEEK);
+                    if (nHeader <= 0) break;
 
                 if (nHeader == 5 && header[0] == 0x16 && header[1] == 0x03) {
                     // TLS Handshake Record
@@ -537,6 +631,7 @@ void DpiEngine::TunnelWithDpi(uintptr_t clientSockRaw, uintptr_t remoteSockRaw) 
 
                 firstPacket = false;
             }
+        }
 
             int n = recv(clientSock, reinterpret_cast<char*>(buffer.data()), static_cast<int>(buffer.size()), 0);
             if (n <= 0) break;

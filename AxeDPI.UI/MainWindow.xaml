@@ -179,21 +179,83 @@
                                                             <StopStoryboard BeginStoryboardName="PulseStoryboard"/>
                                                         </DataTrigger.ExitActions>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                                        <Setter Property="Fill" Value="#F59E0B"/>
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Ellipse.Style>
                                     </Ellipse>
                                     <TextBlock Text="DPI Bypass" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <!-- Paused indicator badge -->
+                                    <Border Margin="10,0,0,0" Padding="6,2" CornerRadius="4" Background="#261E05" BorderBrush="#5B4309" BorderThickness="1" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding IsRunning}" Value="True"/>
+                                                            <Condition Binding="{Binding IsPaused}" Value="True"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="PAUSED" FontSize="10" FontWeight="Bold" Foreground="#F59E0B"/>
+                                    </Border>
                                 </StackPanel>
-                                <TextBlock Text="Bypasses TLS SNI inspection and DNS blocking filters" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                <TextBlock Text="{Binding StatusDescription}" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}"/>
                             </StackPanel>
 
-                            <!-- Custom AxeSwitch -->
-                            <ToggleButton Grid.Column="1"
-                                          Command="{Binding ToggleServiceCommand}"
-                                          IsChecked="{Binding IsRunning, Mode=OneWay}"
-                                          Style="{StaticResource AxeSwitchStyle}"
-                                          VerticalAlignment="Center"/>
+                            <!-- Custom AxeSwitch and Pause Control -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Pause Button (Visible when running) -->
+                                <Button Command="{Binding TogglePauseCommand}" Margin="0,0,12,0" Height="28" Padding="10,0" Cursor="Hand">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Setter Property="Background" Value="{StaticResource CardInnerBgBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <Path x:Name="btnIcon" Data="{StaticResource PauseSvg}" Fill="{StaticResource TextSecondaryBrush}" Width="10" Height="10" Stretch="Uniform" Margin="0,0,6,0"/>
+                                                                <TextBlock x:Name="btnText" Text="{Binding PauseActionText}" FontSize="11.5" FontWeight="Medium" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="border" Property="Background" Value="#252525"/>
+                                                                <Setter TargetName="border" Property="BorderBrush" Value="#444444"/>
+                                                            </Trigger>
+                                                            <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                                                <Setter TargetName="btnIcon" Property="Data" Value="{StaticResource PlaySvg}"/>
+                                                                <Setter TargetName="btnIcon" Property="Fill" Value="#F59E0B"/>
+                                                                <Setter TargetName="btnText" Property="Foreground" Value="#F59E0B"/>
+                                                            </DataTrigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
+                                <ToggleButton Command="{Binding ToggleServiceCommand}"
+                                              IsChecked="{Binding IsRunning, Mode=OneWay}"
+                                              Style="{StaticResource AxeSwitchStyle}"
+                                              VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -340,6 +402,232 @@
 
                         </StackPanel>
                     </Border>
+
+                    <!-- EXCLUDED APPLICATIONS DRAWER -->
+                    <Expander Background="{StaticResource CardBgBrush}"
+                              BorderBrush="{StaticResource BorderSubtleBrush}"
+                              BorderThickness="1"
+                              Margin="0,0,0,14">
+                        <Expander.Style>
+                            <Style TargetType="Expander">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Expander">
+                                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14">
+                                                <StackPanel>
+                                                    <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                  Background="Transparent" BorderThickness="0" Cursor="Hand">
+                                                        <ToggleButton.Template>
+                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                <Border Background="Transparent" Padding="20,16">
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Path Grid.Column="0" Data="{StaticResource AppWindowSvg}" Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.5" Width="15" Height="15" Stretch="Uniform" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                                                        <TextBlock Grid.Column="1" Text="Excluded Applications" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                                        <Border Grid.Column="2" Background="#1C1C1C" CornerRadius="6" Padding="8,2" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding ExcludedApps.Count, StringFormat='{}{0} apps'}" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                                        </Border>
+                                                                        <Path Grid.Column="3" Data="{StaticResource ChevronDownSvg}" Stroke="{StaticResource TextMutedBrush}" StrokeThickness="1.5" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                                                            <Path.Style>
+                                                                                <Style TargetType="Path">
+                                                                                    <Setter Property="RenderTransform">
+                                                                                        <Setter.Value>
+                                                                                            <RotateTransform Angle="0"/>
+                                                                                        </Setter.Value>
+                                                                                    </Setter>
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=Expander}}" Value="True">
+                                                                                            <DataTrigger.EnterActions>
+                                                                                                <BeginStoryboard>
+                                                                                                    <Storyboard>
+                                                                                                        <DoubleAnimation Storyboard.TargetProperty="(Path.RenderTransform).(RotateTransform.Angle)" To="180" Duration="0:0:0.2"/>
+                                                                                                    </Storyboard>
+                                                                                                </BeginStoryboard>
+                                                                                            </DataTrigger.EnterActions>
+                                                                                            <DataTrigger.ExitActions>
+                                                                                                <BeginStoryboard>
+                                                                                                    <Storyboard>
+                                                                                                        <DoubleAnimation Storyboard.TargetProperty="(Path.RenderTransform).(RotateTransform.Angle)" To="0" Duration="0:0:0.2"/>
+                                                                                                    </Storyboard>
+                                                                                                </BeginStoryboard>
+                                                                                            </DataTrigger.ExitActions>
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </Path.Style>
+                                                                        </Path>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </ToggleButton.Template>
+                                                    </ToggleButton>
+
+                                                    <ContentPresenter x:Name="ExpandSite" Visibility="Collapsed" Margin="20,0,20,18" Opacity="0">
+                                                        <ContentPresenter.RenderTransform>
+                                                            <TranslateTransform x:Name="ExpandTranslate" Y="-10"/>
+                                                        </ContentPresenter.RenderTransform>
+                                                    </ContentPresenter>
+                                                </StackPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsExpanded" Value="True">
+                                                    <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="ExpandSite"
+                                                                                 Storyboard.TargetProperty="Opacity"
+                                                                                 From="0.0" To="1.0"
+                                                                                 Duration="0:0:0.22"
+                                                                                 DecelerationRatio="0.9"/>
+                                                                <DoubleAnimation Storyboard.TargetName="ExpandTranslate"
+                                                                                 Storyboard.TargetProperty="Y"
+                                                                                 From="-12.0" To="0.0"
+                                                                                 Duration="0:0:0.22"
+                                                                                 DecelerationRatio="0.9"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Expander.Style>
+
+                        <StackPanel Margin="0,6,0,0">
+                            <TextBlock Text="Outbound connections from these executables bypass DPI packet fragmentation entirely."
+                                       FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                            <!-- Input Row -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox Grid.Column="0" Text="{Binding NewExcludedAppText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Enter" Command="{Binding AddExcludedAppCommand}"/>
+                                    </TextBox.InputBindings>
+                                </TextBox>
+
+                                <Button Grid.Column="1" Command="{Binding AddExcludedAppCommand}" Height="34" Padding="14,0" Margin="0,0,6,0" Cursor="Hand">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{StaticResource CardInnerBgBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0">
+                                                                <Path Data="{StaticResource PlusSvg}" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1.5" Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0"/>
+                                                                <TextBlock Text="Add" FontSize="12" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="border" Property="Background" Value="#222222"/>
+                                                                <Setter TargetName="border" Property="BorderBrush" Value="#444444"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
+                                <Button Grid.Column="2" Command="{Binding BrowseAndAddAppCommand}" Height="34" Padding="12,0" Cursor="Hand">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{StaticResource CardInnerBgBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8,0">
+                                                                <Path Data="{StaticResource FolderSvg}" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1.5" Width="13" Height="13" Stretch="Uniform" Margin="0,0,6,0"/>
+                                                                <TextBlock Text="Browse..." FontSize="12" FontWeight="Medium" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="border" Property="Background" Value="#222222"/>
+                                                                <Setter TargetName="border" Property="BorderBrush" Value="#444444"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+
+                            <!-- Excluded Apps List -->
+                            <Border Background="#070707" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="10" MinHeight="70" MaxHeight="160">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6">
+                                    <ItemsControl ItemsSource="{Binding ExcludedApps}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#141414" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="6" Margin="0,2" Padding="10,6">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Path Grid.Column="0" Data="{StaticResource AppWindowSvg}" Stroke="{StaticResource TextSecondaryBrush}" StrokeThickness="1.5" Width="12" Height="12" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding}" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontFamily="Consolas, Cascadia Code, monospace"/>
+
+                                                        <Button Grid.Column="2"
+                                                                Command="{Binding DataContext.RemoveExcludedAppCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Width="22" Height="22" Cursor="Hand">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Background" Value="Transparent"/>
+                                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="Button">
+                                                                                <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4">
+                                                                                    <Path x:Name="icon" Data="{StaticResource CloseSvg}" Stroke="{StaticResource TextMutedBrush}" StrokeThickness="1.5" Width="9" Height="9" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                                </Border>
+                                                                                <ControlTemplate.Triggers>
+                                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                                        <Setter TargetName="border" Property="Background" Value="#331111"/>
+                                                                                        <Setter TargetName="icon" Property="Stroke" Value="#FF6B6B"/>
+                                                                                    </Trigger>
+                                                                                </ControlTemplate.Triggers>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Expander>
 
                     <!-- SETTINGS DRAWER WITH CUSTOM AXESLIDERS (Smooth Animated Reveal) -->
                     <Expander Background="{StaticResource CardBgBrush}"

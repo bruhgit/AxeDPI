@@ -64,6 +64,44 @@ int __cdecl DpiIsRunning() {
     return AxeDpi::DpiEngine::Instance().IsRunning() ? 1 : 0;
 }
 
+void __cdecl DpiSetPaused(int paused) {
+    AxeDpi::DpiEngine::Instance().SetPaused(paused != 0);
+}
+
+int __cdecl DpiIsPaused() {
+    return AxeDpi::DpiEngine::Instance().IsPaused() ? 1 : 0;
+}
+
+void __cdecl DpiSetExcludedApps(const char* commaSeparatedList) {
+    std::vector<std::string> apps;
+    if (commaSeparatedList && std::strlen(commaSeparatedList) > 0) {
+        std::string raw(commaSeparatedList);
+        size_t start = 0;
+        while (start < raw.size()) {
+            size_t delim = raw.find_first_of(",;", start);
+            std::string token = (delim == std::string::npos) ? raw.substr(start) : raw.substr(start, delim - start);
+            
+            // Trim whitespace
+            size_t first = token.find_first_not_of(" \t\r\n");
+            size_t last = token.find_last_not_of(" \t\r\n");
+            if (first != std::string::npos && last != std::string::npos) {
+                token = token.substr(first, (last - first + 1));
+                if (!token.empty()) {
+                    apps.push_back(token);
+                }
+            }
+            if (delim == std::string::npos) break;
+            start = delim + 1;
+        }
+    }
+    AxeDpi::DpiEngine::Instance().SetExcludedApps(apps);
+}
+
+int __cdecl DpiIsAppExcluded(const char* appName) {
+    if (!appName || std::strlen(appName) == 0) return 0;
+    return AxeDpi::DpiEngine::Instance().IsAppExcluded(appName) ? 1 : 0;
+}
+
 int __cdecl DpiSetSystemProxy(int enable, const char* proxyAddr) {
     std::string addr = proxyAddr ? proxyAddr : "127.0.0.1:10808";
     return AxeDpi::SysProxyManager::SetSystemProxy(enable != 0, addr) ? 1 : 0;
