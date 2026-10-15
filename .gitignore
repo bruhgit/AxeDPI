@@ -1,0 +1,26 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+publish/
+installer_output/
+*.exe
+!AxeDPI.UI/Assets/*.ico
+
+# Visual Studio & IDE files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+
+# C++ CMake build caches
+core_cpp/build/
+core_cpp/CMakeScripts/
+core_cpp/CMakeFiles/
+core_cpp/cmake_install.cmake
+core_cpp/CMakeCache.txt
